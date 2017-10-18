@@ -4,7 +4,6 @@ import csv
 import gdax
 import datetime
 
-
 DATA_FILE_PATH = 'data/price_data'
 CURRENCY_ETH = 'ETH-USD'
 CURRENCY_BTC = 'BTC-USD'
@@ -26,16 +25,22 @@ def collect_data():
     currencies = [CURRENCY_ETH, CURRENCY_BTC]
     csv_writers = [csv_writer_eth, csv_writer_btc]
 
-    while(start_datetime < end_datetime):
-        period_end_datetime = start_datetime + datetime.timedelta(hours = 1)
+    while (start_datetime < end_datetime):
+        period_end_datetime = start_datetime + datetime.timedelta(hours=1)
 
         for (csv_writer_cur, currency) in zip(csv_writers, currencies):
-            prices = client.get_product_historic_rates(currency, start_datetime.isoformat(), period_end_datetime.isoformat(), DATA_GRANULARITY)
+            prices = client.get_product_historic_rates(
+                currency,
+                start_datetime.isoformat(),
+                period_end_datetime.isoformat(), DATA_GRANULARITY)
 
             csv_writer_cur.writerows(prices)
-            print('Wrote data for timestamp:', start_datetime, 'currency:', currency)
+            print('Wrote data for timestamp:', start_datetime, 'currency:',
+                  currency)
 
         start_datetime = period_end_datetime
+
+    print('Successfully completed writing historical data')
 
 
 if __name__ == '__main__':

@@ -1,0 +1,6 @@
+# Ignore python byproducts
+*.pyc
+__pycache__/
+
+# Ignore confidential files
+api_access_data.py

@@ -1,41 +1,41 @@
 from coinbase.wallet.client import Client
 import api_access_data
 import csv
-import time
+import gdax
+import datetime
 
 
-PRICE_AMOUNT = 'amount'
-TIME_EPOCH = 'epoch'
-TIME_ISO = 'iso'
-DATA_FILE_PATH = 'data/price_data.csv'
-LOG_FREQUENCY = 60
-
-
-def get_client():
-    return Client(api_access_data.API_KEY, api_access_data.API_SECRET)
+DATA_FILE_PATH = 'data/price_data'
+CURRENCY_ETH = 'ETH-USD'
+CURRENCY_BTC = 'BTC-USD'
+DATA_GRANULARITY = 60
 
 
 def collect_data():
-    data_file = open(DATA_FILE_PATH, 'a+')
-    csv_writer = csv.writer(data_file)
-    client = get_client()
+    data_file_eth = open(DATA_FILE_PATH + '_eth.csv', 'a+')
+    data_file_btc = open(DATA_FILE_PATH + '_btc.csv', 'a+')
 
-    while(True):
-        prices = []
+    csv_writer_eth = csv.writer(data_file_eth)
+    csv_writer_btc = csv.writer(data_file_btc)
 
-        price = []
-        timestamp = client.get_time()
-        price.extend([timestamp[TIME_EPOCH], timestamp[TIME_ISO]])
-        currency = 'BTC-USD'
-        spot_price_btc = client.get_spot_price(currency_pair = currency)
-        price.append(currency)
-        price.append(spot_price_btc[PRICE_AMOUNT])
-        prices.append(price)
+    client = gdax.PublicClient()
 
-        csv_writer.writerows(prices)
-        print('Wrote data for timestamp:', timestamp[TIME_ISO], 'currency:', currency)
+    start_datetime = datetime.datetime(2017, 1, 1, 0, 0)
+    end_datetime = datetime.datetime(2017, 10, 18, 0, 0)
 
-        time.sleep(60)
+    currencies = [CURRENCY_ETH, CURRENCY_BTC]
+    csv_writers = [csv_writer_eth, csv_writer_btc]
+
+    while(start_datetime < end_datetime):
+        period_end_datetime = start_datetime + datetime.timedelta(hours = 1)
+
+        for (csv_writer_cur, currency) in zip(csv_writers, currencies):
+            prices = client.get_product_historic_rates(currency, start_datetime.isoformat(), period_end_datetime.isoformat(), DATA_GRANULARITY)
+
+            csv_writer_cur.writerows(prices)
+            print('Wrote data for timestamp:', start_datetime, 'currency:', currency)
+
+        start_datetime = period_end_datetime
 
 
 if __name__ == '__main__':

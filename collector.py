@@ -33,6 +33,7 @@ def collect_data():
         prices.append(price)
 
         csv_writer.writerows(prices)
+        print('Wrote data for timestamp:', timestamp[TIME_ISO], 'currency:', currency)
 
         time.sleep(60)
 

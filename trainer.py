@@ -58,7 +58,10 @@ def learn(args):
     outputs = tf.placeholder(tf.float32, (None, OUTPUT_SIZE))
 
     num_hidden_units = args.hidden_units
-    lstm_cell = tf.contrib.rnn.BasicLSTMCell(num_hidden_units)
+    lstm_cell = tf.contrib.rnn.MultiRNNCell([
+        tf.contrib.rnn.BasicLSTMCell(num_hidden_units),
+        tf.contrib.rnn.BasicLSTMCell(num_hidden_units)
+    ])
     initial_state = lstm_cell.zero_state(1, tf.float32)
     rnn_outputs, rnn_states = tf.nn.dynamic_rnn(
         lstm_cell, inputs, initial_state=initial_state, time_major=True)

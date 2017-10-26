@@ -1,15 +1,16 @@
 import api_access_data
 import argparse
-from coinbase.wallet.client import Client
+import constants
 from datetime import datetime, timedelta
 import gdax
+import MySQLdb
 import numpy as np
 import tensorflow as tf
 import time
+import trade
 import trainer
 
 gdax_client = gdax.PublicClient()
-cb_client = Client(api_access_data.API_KEY, api_access_data.API_SECRET)
 
 DATA_GRANULARITY = 60
 HISTORICAL_DATA_BUFFER_SIZE = 10
@@ -68,10 +69,6 @@ def get_initial_state(currency, sequence_length):
     return stationary_data, price_series[-1][0]
 
 
-def trade(prediction):
-    print(prediction)
-
-
 def init(args):
     state, last_price = get_initial_state(args.currency, args.sequence_length)
 
@@ -88,11 +85,18 @@ def init(args):
     inputs = graph.get_tensor_by_name(trainer.INPUT_PLACEHOLDER + ':0')
     pred = graph.get_tensor_by_name(trainer.OUTPUT_LAYER + ':0')
 
+    db = MySQLdb.connect(
+        db=constants.MYSQL_DB_NAME,
+        host=constants.MYSQL_HOST,
+        user=api_access_data.MYSQL_USER,
+        passwd=api_access_data.MYSQL_PASSWD)
+    db.autocommit(True)
+
     while (True):
         prediction = session.run([pred], {inputs: state})
 
         prediction = np.squeeze(prediction)
-        trade(prediction)
+        trade.trade(prediction, db)
 
         time.sleep(SLEEP_TIME)
 

@@ -1,4 +1,3 @@
-from coinbase.wallet.client import Client
 import api_access_data
 import csv
 import gdax

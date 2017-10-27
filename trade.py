@@ -1,11 +1,18 @@
 import api_access_data
 import constants
 import gdax
+from influxdb import InfluxDBClient
 import MySQLdb
+
+import time
 
 gdax_auth_client = gdax.AuthenticatedClient(api_access_data.GDAX_API_KEY,
                                             api_access_data.GDAX_API_SECRET,
                                             api_access_data.GDAX_PASSPHRASE)
+
+influxdb_client = InfluxDBClient(
+    constants.INFLUXDB_HOST, constants.INFLUXDB_PORT, constants.INFLUXDB_USER,
+    constants.INFLUXDB_PASS, constants.INFLUXDB_DB_NAME)
 
 # gdax_auth_client = gdax.AuthenticatedClient(
 #     api_access_data.GDAX_API_KEY,
@@ -21,7 +28,7 @@ LIMIT_ORDER_BID_BUFFER = 0.01
 LIMIT_ORDER_ASK_BUFFER = 0.01
 
 
-def write_transaction_to_db(cursor, order):
+def write_transaction_to_mysql(cursor, order):
     insert_query = """insert into %s values ('%s', %s, '%s', '%s', '%s', \
     '%s', '%s', '%s', %s, %s, %s)""" % (constants.TRANSACTIONS_TABLE,
                                         order[constants.GDAX_ID],
@@ -37,6 +44,7 @@ def write_transaction_to_db(cursor, order):
                                         order[constants.GDAX_EXECUTED_VALUE])
     cursor.execute(insert_query)
 
+    # Update bankroll in MySQL
     transaction_cost = float(order[constants.GDAX_FILL_FEES]) + float(
         order[constants.GDAX_EXECUTED_VALUE])
     amount_filled = float(order[constants.GDAX_FILLED_SIZE])
@@ -58,6 +66,28 @@ def write_transaction_to_db(cursor, order):
     cursor.execute(update_eth_query)
 
 
+def write_bankroll_to_influxdb(cursor):
+    fetch_bankroll_query = """select %s, %s from %s""" % (
+        constants.BANKROLL_CURRENCY, constants.BANKROLL_AMOUNT,
+        constants.BANKROLL_TABLE)
+    cursor.execute(fetch_bankroll_query)
+    bankroll = cursor.fetchall()
+    data = []
+    for balance in bankroll:
+        datapoint = {}
+        datapoint[
+            constants.
+            INFLUXDB_MEASUREMENT] = constants.INFLUXDB_MEASUREMENT_BANKROLL
+        datapoint[constants.INFLUXDB_TAGS] = {
+            constants.INFLUXDB_TAGS_CURRENCY: balance[0]
+        }
+        datapoint[constants.INFLUXDB_FIELDS] = {
+            constants.INFLUXDB_FIELDS_AMOUNT: balance[1]
+        }
+        data.append(datapoint)
+    influxdb_client.write_points(data)
+
+
 def handle_outstanding_orders(cursor):
     # Check on previous orders
     fetch_order_query = """select %s from %s""" % (
@@ -75,7 +105,7 @@ def handle_outstanding_orders(cursor):
         if (constants.GDAX_MESSAGE in order_status):
             print("Error: %s", order_status[constants.GDAX_MESSAGE])
         else:
-            write_transaction_to_db(cursor, order_status)
+            write_transaction_to_mysql(cursor, order_status)
 
     # Clear pending orders
     clear_orders_query = """delete from %s""" % (
@@ -154,3 +184,17 @@ def trade(pred, db):
         store_order_query = """insert into %s values('%s')""" % (
             constants.PENDING_ORDERS_TABLE, order_id)
         cursor.execute(store_order_query)
+
+    write_bankroll_to_influxdb(cursor)
+
+
+if __name__ == '__main__':
+    db = MySQLdb.connect(
+        db=constants.MYSQL_DB_NAME,
+        host=constants.MYSQL_HOST,
+        user=api_access_data.MYSQL_USER,
+        passwd=api_access_data.MYSQL_PASSWD)
+    db.autocommit(True)
+    for i in range(100):
+        write_bankroll_to_influxdb(db.cursor())
+        time.sleep(1)

@@ -3,6 +3,7 @@ import argparse
 import constants
 from datetime import datetime, timedelta
 import gdax
+from influxdb import InfluxDBClient
 import MySQLdb
 import numpy as np
 import tensorflow as tf
@@ -11,6 +12,10 @@ import trade
 import trainer
 
 gdax_client = gdax.PublicClient()
+
+influxdb_client = InfluxDBClient(
+    constants.INFLUXDB_HOST, constants.INFLUXDB_PORT, constants.INFLUXDB_USER,
+    constants.INFLUXDB_PASS, constants.INFLUXDB_DB_NAME)
 
 DATA_GRANULARITY = 60
 HISTORICAL_DATA_BUFFER_SIZE = 10
@@ -69,6 +74,27 @@ def get_initial_state(currency, sequence_length):
     return stationary_data, price_series[-1][0]
 
 
+def write_prediction_to_influxdb(predicted_trend, actual_trend):
+    data = []
+    for (trend_type, trend_value) in [(constants.INFLUXDB_TAGS_ACTUAL,
+                                       float(actual_trend)),
+                                      (constants.INFLUXDB_TAGS_PREDICTED,
+                                       float(predicted_trend))]:
+        datapoint = {}
+        datapoint[
+            constants.
+            INFLUXDB_MEASUREMENT] = constants.INFLUXDB_MEASUREMENT_PREDICTIONS
+        datapoint[constants.INFLUXDB_TAGS] = {
+            constants.INFLUXDB_TAGS_TYPE: trend_type
+        }
+        datapoint[constants.INFLUXDB_FIELDS] = {
+            constants.INFLUXDB_FIELDS_VALUE: trend_value
+        }
+        data.append(datapoint)
+
+    influxdb_client.write_points(data)
+
+
 def init(args):
     state, last_price = get_initial_state(args.currency, args.sequence_length)
 
@@ -92,20 +118,28 @@ def init(args):
         passwd=api_access_data.MYSQL_PASSWD)
     db.autocommit(True)
 
+    last_prediction = 0
     while (True):
         prediction = session.run([pred], {inputs: state})
+        prediction = np.squeeze(prediction).item()
 
-        prediction = np.squeeze(prediction)
-        trade.trade(prediction, db)
+        if args.test:
+            print('In test mode: not performing trades. Check grafana for '
+                  'performance metrics')
+        else:
+            trade.trade(prediction, db)
 
         time.sleep(SLEEP_TIME)
 
         # Get new data
-        new_data = get_last_minute_data()
+        new_data = get_last_minute_data(args.currency)
         new_price = new_data[1]
         new_data = new_data.reshape(1, 1, new_data.shape[0])
-        np.append(state, new_data)
-        state[-1, 0] = (state[-1, 0] - last_price) / last_price
+        state = np.vstack((state[1:, :], new_data))
+        current_trend = (state[-1, 0, 0] - last_price) / last_price
+        state[-1, 0, 0] = current_trend
+        write_prediction_to_influxdb(last_prediction, current_trend)
+        last_prediction = prediction
         last_price = new_price
 
 
@@ -120,6 +154,7 @@ def parse_args():
         choices=set(('ETH-USD', 'BTC-USD')))
     parser.add_argument('-s', '--sequence_length', type=int, default=60)
     parser.add_argument('-m', '--model_file', default='')
+    parser.add_argument('-t', '--test', action='store_true', default=False)
 
     return parser.parse_args()
 

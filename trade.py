@@ -14,12 +14,6 @@ influxdb_client = InfluxDBClient(
     constants.INFLUXDB_HOST, constants.INFLUXDB_PORT, constants.INFLUXDB_USER,
     constants.INFLUXDB_PASS, constants.INFLUXDB_DB_NAME)
 
-# gdax_auth_client = gdax.AuthenticatedClient(
-#     api_access_data.GDAX_API_KEY,
-#     api_access_data.GDAX_API_SECRET,
-#     api_access_data.GDAX_PASSPHRASE,
-#     api_url="https://api-public.sandbox.gdax.com")
-
 CURRENCY = 'ETH-USD'
 BUY_CONFIDENCE_THRESHOLD = 0.005
 SELL_CONFIDENCE_THRESHOLD = 0
@@ -186,15 +180,3 @@ def trade(pred, db):
         cursor.execute(store_order_query)
 
     write_bankroll_to_influxdb(cursor)
-
-
-if __name__ == '__main__':
-    db = MySQLdb.connect(
-        db=constants.MYSQL_DB_NAME,
-        host=constants.MYSQL_HOST,
-        user=api_access_data.MYSQL_USER,
-        passwd=api_access_data.MYSQL_PASSWD)
-    db.autocommit(True)
-    for i in range(100):
-        write_bankroll_to_influxdb(db.cursor())
-        time.sleep(1)

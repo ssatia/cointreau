@@ -11,6 +11,7 @@ OUTPUT_LAYER = 'prediction'
 TRAIN_TEST_SPLIT = 0.8
 INPUT_SIZE = 2
 OUTPUT_SIZE = 1
+LOG_FREQUENCY = 1000
 
 
 # Labelling for last timestep
@@ -19,9 +20,9 @@ def get_data(input_file, sequence_length):
 
     # Make data stationary, based on % change
     prev = data[0][0]
-    data[0][0] = 0
     for i in range(1, len(data)):
         data[i][0], prev = (data[i][0] - prev) / prev, data[i][0]
+    data = data[1:, :]
 
     data = np.array(data)
     x = []
@@ -79,17 +80,19 @@ def learn(args):
     saver = tf.train.Saver()
     session = tf.Session()
     session.run(tf.global_variables_initializer())
+    print('Beginning training.')
     for epoch in range(1, args.epochs + 1):
         epoch_error = 0
-        for (x, y) in zip(train_x, train_y):
+        for (counter, (x, y)) in enumerate(zip(train_x, train_y)):
             train_error, _, pred = session.run([error, optimizer, prediction],
                                                {
                                                    inputs: x,
                                                    outputs: y
                                                })
-            print(y, pred)
+            if (counter % LOG_FREQUENCY == 0):
+                print('Iteration: %d; Error: %f; Prediction: %f; Actual: %f' %
+                      (counter, train_error, pred, y))
             epoch_error += train_error
-            print('Train error:', train_error)
 
         epoch_error /= len(train_x)
         print('Epoch #:', epoch, '\nMSE:', epoch_error)
@@ -101,6 +104,7 @@ def learn(args):
     predictions = []
     test_error = 0
     max_error = 0
+
     for (x, y) in zip(test_x, test_y):
         pred, cur_error = session.run([prediction, error], {
             inputs: x,

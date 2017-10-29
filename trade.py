@@ -11,8 +11,9 @@ gdax_auth_client = gdax.AuthenticatedClient(api_access_data.GDAX_API_KEY,
                                             api_access_data.GDAX_PASSPHRASE)
 
 influxdb_client = InfluxDBClient(
-    constants.INFLUXDB_HOST, constants.INFLUXDB_PORT, constants.INFLUXDB_USER,
-    constants.INFLUXDB_PASS, constants.INFLUXDB_DB_NAME)
+    constants.INFLUXDB_HOST, constants.INFLUXDB_PORT,
+    api_access_data.INFLUXDB_USER, api_access_data.INFLUXDB_PASS,
+    constants.INFLUXDB_DB_NAME)
 
 CURRENCY = 'ETH-USD'
 BUY_CONFIDENCE_THRESHOLD = 0.005

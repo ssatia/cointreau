@@ -14,8 +14,9 @@ import trainer
 gdax_client = gdax.PublicClient()
 
 influxdb_client = InfluxDBClient(
-    constants.INFLUXDB_HOST, constants.INFLUXDB_PORT, constants.INFLUXDB_USER,
-    constants.INFLUXDB_PASS, constants.INFLUXDB_DB_NAME)
+    constants.INFLUXDB_HOST, constants.INFLUXDB_PORT,
+    api_access_data.INFLUXDB_USER, api_access_data.INFLUXDB_PASS,
+    constants.INFLUXDB_DB_NAME)
 
 DATA_GRANULARITY = 60
 HISTORICAL_DATA_BUFFER_SIZE = 10
@@ -118,10 +119,10 @@ def init(args):
         passwd=api_access_data.MYSQL_PASSWD)
     db.autocommit(True)
 
-    last_prediction = 0
     while (True):
         prediction = session.run([pred], {inputs: state})
         prediction = np.squeeze(prediction).item()
+        print('Trend prediction: %f%%' % (prediction * 100))
 
         if args.test:
             print('In test mode: not performing trades. Check grafana for '
@@ -133,13 +134,16 @@ def init(args):
 
         # Get new data
         new_data = get_last_minute_data(args.currency)
-        new_price = new_data[1]
+        new_price = new_data[0]
         new_data = new_data.reshape(1, 1, new_data.shape[0])
         state = np.vstack((state[1:, :], new_data))
         current_trend = (state[-1, 0, 0] - last_price) / last_price
         state[-1, 0, 0] = current_trend
-        write_prediction_to_influxdb(last_prediction, current_trend)
-        last_prediction = prediction
+        prediction *= 100
+        current_trend *= 100
+        write_prediction_to_influxdb(prediction, current_trend)
+        print('Acutal trend: %f%%; Last prediction: %f%%' % (current_trend,
+                                                             prediction))
         last_price = new_price
 
 

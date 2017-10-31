@@ -1,2 +1,0 @@
-model_checkpoint_path: "eth_lstm_model_l2_e1_h10.ckpt"
-all_model_checkpoint_paths: "eth_lstm_model_l2_e1_h10.ckpt"

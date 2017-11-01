@@ -1,6 +1,7 @@
 import api_access_data
 import argparse
 import constants
+import copy
 from datetime import datetime, timedelta
 import gdax
 from influxdb import InfluxDBClient
@@ -31,26 +32,15 @@ def get_last_x_minute_data(currency, x):
                                                       start_time.isoformat(),
                                                       end_time.isoformat(),
                                                       DATA_GRANULARITY)
-    new_data = np.array(new_data)[-x:, 4:6]
+    new_data = np.array(new_data)[-x:, 1:]
 
     return new_data
 
 
 def get_last_minute_data(currency):
-    new_data = get_last_x_minute_data(currency, 2)
+    new_data = get_last_x_minute_data(currency, 1)
 
-    return np.array(merge_candles(new_data))
-
-
-def merge_candles(candles):
-    volume = 0
-    price = 0
-    for candle in candles:
-        volume += candle[1]
-    for candle in candles:
-        price += candle[0] * (candle[1] / volume)
-
-    return [price, volume]
+    return np.squeeze(np.array(new_data))
 
 
 def get_initial_state(currency, sequence_length):
@@ -59,20 +49,17 @@ def get_initial_state(currency, sequence_length):
 
     price_series = get_last_x_minute_data(currency, sequence_length + 1)
 
-    stationary_data = []
+    old_datapoint = price_series[0]
     for i in range(1, sequence_length + 1):
-        datapoint = [(
-            price_series[i][0] - price_series[i - 1][0]) / price_series[i
-                                                                        - 1][0]
-                     ]
-        datapoint.append(price_series[i][1])
-        stationary_data.append(datapoint)
+        new_datapoint = copy.copy(price_series[i])
+        price_series[i] /= old_datapoint
+        old_datapoint = new_datapoint
+    price_series = price_series[1:, :]
 
-    stationary_data = np.array(stationary_data)
-    stationary_data = stationary_data.reshape(stationary_data.shape[0], 1,
-                                              stationary_data.shape[1])
+    price_series = price_series.reshape(1, price_series.shape[0],
+                                        price_series.shape[1])
 
-    return stationary_data, price_series[-1][0]
+    return price_series, old_datapoint
 
 
 def write_prediction_to_influxdb(predicted_trend, actual_trend):
@@ -97,7 +84,8 @@ def write_prediction_to_influxdb(predicted_trend, actual_trend):
 
 
 def init(args):
-    state, last_price = get_initial_state(args.currency, args.sequence_length)
+    state, last_datapoint = get_initial_state(args.currency,
+                                              args.sequence_length)
 
     # Restore trained model
     session = tf.Session()
@@ -121,7 +109,7 @@ def init(args):
 
     while (True):
         prediction = session.run([pred], {inputs: state})
-        prediction = np.squeeze(prediction).item()
+        prediction = np.squeeze(prediction).item() - 1
         print('Trend prediction: %f%%' % (prediction * 100))
 
         if args.test:
@@ -133,18 +121,17 @@ def init(args):
         time.sleep(SLEEP_TIME)
 
         # Get new data
-        new_data = get_last_minute_data(args.currency)
-        new_price = new_data[0]
-        new_data = new_data.reshape(1, 1, new_data.shape[0])
-        state = np.vstack((state[1:, :], new_data))
-        current_trend = (state[-1, 0, 0] - last_price) / last_price
-        state[-1, 0, 0] = current_trend
+        new_datapoint = get_last_minute_data(args.currency)
+        new_datapoint, last_datapoint = (new_datapoint / last_datapoint,
+                                         new_datapoint)
+        current_trend = new_datapoint[-2] - 1
+        new_datapoint = new_datapoint.reshape(1, 1, new_datapoint.shape[0])
+        state = np.concatenate((state[:, 1:, :], new_datapoint), axis=1)
         prediction *= 100
         current_trend *= 100
         write_prediction_to_influxdb(prediction, current_trend)
         print('Acutal trend: %f%%; Last prediction: %f%%' % (current_trend,
                                                              prediction))
-        last_price = new_price
 
 
 def parse_args():
@@ -156,7 +143,7 @@ def parse_args():
         '--currency',
         default='ETH-USD',
         choices=set(('ETH-USD', 'BTC-USD')))
-    parser.add_argument('-s', '--sequence_length', type=int, default=60)
+    parser.add_argument('-s', '--sequence_length', type=int, default=30)
     parser.add_argument('-m', '--model_file', default='')
     parser.add_argument('-t', '--test', action='store_true', default=False)
 

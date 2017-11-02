@@ -3,6 +3,7 @@ import argparse
 import constants
 import copy
 from datetime import datetime, timedelta
+from functools import reduce
 import gdax
 from influxdb import InfluxDBClient
 import MySQLdb
@@ -21,7 +22,7 @@ influxdb_client = InfluxDBClient(
 
 DATA_GRANULARITY = 60
 HISTORICAL_DATA_BUFFER_SIZE = 10
-SLEEP_TIME = 60
+SLEEP_TIME = 1
 MODEL_DIR = 'model/'
 
 
@@ -40,7 +41,23 @@ def get_last_x_minute_data(currency, x):
 def get_last_minute_data(currency):
     new_data = get_last_x_minute_data(currency, 1)
 
-    return np.squeeze(np.array(new_data))
+    new_data = np.squeeze(np.array(merge_candles(new_data)))
+    return new_data
+
+
+def merge_candles(candles):
+    merged_candle = []
+    volume = reduce((lambda x, y: x + y[-1]), candles, 0)
+
+    for i in range(len(candles[0]) - 1):
+        weighted_avg = 0
+        for candle in candles:
+            weighted_avg += candle[i] * (candle[-1] / volume)
+        merged_candle.append(weighted_avg)
+
+    merged_candle.append(volume)
+
+    return merged_candle
 
 
 def get_initial_state(currency, sequence_length):
@@ -64,10 +81,12 @@ def get_initial_state(currency, sequence_length):
 
 def write_prediction_to_influxdb(predicted_trend, actual_trend):
     data = []
-    for (trend_type, trend_value) in [(constants.INFLUXDB_TAGS_ACTUAL,
-                                       float(actual_trend)),
-                                      (constants.INFLUXDB_TAGS_PREDICTED,
-                                       float(predicted_trend))]:
+    metrics = [(constants.INFLUXDB_TAGS_ACTUAL, float(actual_trend)),
+               (constants.INFLUXDB_TAGS_PREDICTED,
+                float(predicted_trend)), (constants.INFLUXDB_TAGS_ERROR, float(
+                    abs(actual_trend - predicted_trend)))]
+
+    for (trend_type, trend_value) in metrics:
         datapoint = {}
         datapoint[
             constants.

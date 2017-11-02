@@ -22,7 +22,7 @@ influxdb_client = InfluxDBClient(
 
 DATA_GRANULARITY = 60
 HISTORICAL_DATA_BUFFER_SIZE = 10
-SLEEP_TIME = 1
+SLEEP_TIME = 60
 MODEL_DIR = 'model/'
 
 

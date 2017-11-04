@@ -18,7 +18,7 @@ def collect_data():
 
     client = gdax.PublicClient()
 
-    start_datetime = datetime.datetime(2017, 10, 18, 0, 0)
+    start_datetime = datetime.datetime(2017, 1, 1, 0, 0)
     end_datetime = datetime.datetime(2017, 11, 3, 0, 0)
 
     currencies = [CURRENCY_ETH, CURRENCY_BTC]

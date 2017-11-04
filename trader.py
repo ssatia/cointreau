@@ -33,6 +33,7 @@ def get_last_x_minute_data(currency, x):
                                                       start_time.isoformat(),
                                                       end_time.isoformat(),
                                                       DATA_GRANULARITY)
+    new_data.reverse()
     new_data = np.array(new_data)[-x:, 1:]
 
     return new_data
@@ -40,8 +41,8 @@ def get_last_x_minute_data(currency, x):
 
 def get_last_minute_data(currency):
     new_data = get_last_x_minute_data(currency, 1)
-
     new_data = np.squeeze(np.array(merge_candles(new_data)))
+
     return new_data
 
 

@@ -1,7 +1,7 @@
-import api_access_data
 import csv
-import gdax
 import datetime
+import gdax
+import time
 
 DATA_FILE_PATH = 'data/price_data'
 CURRENCY_ETH = 'ETH-USD'
@@ -18,8 +18,8 @@ def collect_data():
 
     client = gdax.PublicClient()
 
-    start_datetime = datetime.datetime(2017, 1, 1, 0, 0)
-    end_datetime = datetime.datetime(2017, 10, 18, 0, 0)
+    start_datetime = datetime.datetime(2017, 10, 18, 0, 0)
+    end_datetime = datetime.datetime(2017, 11, 3, 0, 0)
 
     currencies = [CURRENCY_ETH, CURRENCY_BTC]
     csv_writers = [csv_writer_eth, csv_writer_btc]
@@ -33,9 +33,21 @@ def collect_data():
                 start_datetime.isoformat(),
                 period_end_datetime.isoformat(), DATA_GRANULARITY)
 
+            # Detect errors
+            if (isinstance(prices, dict)):
+                print('Error for %s (%s - %s):' %
+                      (currency, start_datetime.isoformat(),
+                       period_end_datetime.isoformat()))
+                print(prices)
+                continue
+
+            prices.reverse()
             csv_writer_cur.writerows(prices)
             print('Wrote data for timestamp:', start_datetime, 'currency:',
                   currency)
+
+            # Prevent rate limiting
+            time.sleep(1)
 
         start_datetime = period_end_datetime
 

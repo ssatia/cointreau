@@ -46,10 +46,10 @@ def collect_data():
             print('Wrote data for timestamp:', start_datetime, 'currency:',
                   currency)
 
-            # Prevent rate limiting
-            time.sleep(1)
-
         start_datetime = period_end_datetime
+
+        # Prevent rate limiting
+        time.sleep(1)
 
     print('Successfully completed writing historical data')
 

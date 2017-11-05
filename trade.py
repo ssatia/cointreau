@@ -17,8 +17,8 @@ influxdb_client = InfluxDBClient(
 BUY_CONFIDENCE_THRESHOLD = 0.02
 SELL_CONFIDENCE_THRESHOLD = -0.01
 BASE_SIZE = 0.01
-LIMIT_ORDER_BID_BUFFER = 1.01
-LIMIT_ORDER_ASK_BUFFER = 1.01
+LIMIT_ORDER_BID_BUFFER = 0.01
+LIMIT_ORDER_ASK_BUFFER = 0.01
 
 
 def write_transaction_to_mysql(cursor, order, fiat_currency, crypto_currency):

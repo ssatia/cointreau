@@ -129,14 +129,15 @@ def init(args):
 
     while (True):
         prediction = session.run([pred], {inputs: state})
-        prediction = np.squeeze(prediction).item() - 1
-        print('Trend prediction: %f%%' % (prediction * 100))
+        prediction = (np.squeeze(prediction).item() - 1) * 100
+        print('Trend prediction: %f%%' % (prediction))
 
         if args.test:
             print('In test mode: not performing trades. Check grafana for '
                   'performance metrics')
         else:
-            trade.trade(prediction, db)
+            cursor = db.cursor()
+            trade.trade(prediction, args.currency, cursor)
 
         time.sleep(SLEEP_TIME)
 
@@ -147,7 +148,6 @@ def init(args):
         current_trend = new_datapoint[-2] - 1
         new_datapoint = new_datapoint.reshape(1, 1, new_datapoint.shape[0])
         state = np.concatenate((state[:, 1:, :], new_datapoint), axis=1)
-        prediction *= 100
         current_trend *= 100
         write_prediction_to_influxdb(prediction, current_trend)
         print('Acutal trend: %f%%; Last prediction: %f%%' % (current_trend,

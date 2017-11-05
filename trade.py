@@ -1,10 +1,9 @@
 import api_access_data
 import constants
+from datetime import datetime
 import gdax
 from influxdb import InfluxDBClient
 import MySQLdb
-
-import time
 
 gdax_auth_client = gdax.AuthenticatedClient(api_access_data.GDAX_API_KEY,
                                             api_access_data.GDAX_API_SECRET,
@@ -15,15 +14,14 @@ influxdb_client = InfluxDBClient(
     api_access_data.INFLUXDB_USER, api_access_data.INFLUXDB_PASS,
     constants.INFLUXDB_DB_NAME)
 
-CURRENCY = 'ETH-USD'
-BUY_CONFIDENCE_THRESHOLD = 0.005
-SELL_CONFIDENCE_THRESHOLD = 0
+BUY_CONFIDENCE_THRESHOLD = 0.02
+SELL_CONFIDENCE_THRESHOLD = -0.01
 BASE_SIZE = 0.01
-LIMIT_ORDER_BID_BUFFER = 0.01
-LIMIT_ORDER_ASK_BUFFER = 0.01
+LIMIT_ORDER_BID_BUFFER = 1.01
+LIMIT_ORDER_ASK_BUFFER = 1.01
 
 
-def write_transaction_to_mysql(cursor, order):
+def write_transaction_to_mysql(cursor, order, fiat_currency, crypto_currency):
     insert_query = """insert into %s values ('%s', %s, '%s', '%s', '%s', \
     '%s', '%s', '%s', %s, %s, %s)""" % (constants.TRANSACTIONS_TABLE,
                                         order[constants.GDAX_ID],
@@ -48,17 +46,17 @@ def write_transaction_to_mysql(cursor, order):
         transaction_cost = -transaction_cost
         amount_filled = -amount_filled
 
-    update_usd_query = """update %s set %s = %s + %f where %s='%s'""" % (
+    update_fiat_query = """update %s set %s = %s + %f where %s='%s'""" % (
         constants.BANKROLL_TABLE, constants.BANKROLL_AMOUNT,
         constants.BANKROLL_AMOUNT, transaction_cost,
-        constants.BANKROLL_CURRENCY, constants.BANKROLL_USD)
-    cursor.execute(update_usd_query)
+        constants.BANKROLL_CURRENCY, fiat_currency)
+    cursor.execute(update_fiat_query)
 
-    update_eth_query = """update %s set %s = %s - %f where %s='%s'""" % (
+    update_crypto_query = """update %s set %s = %s - %f where %s='%s'""" % (
         constants.BANKROLL_TABLE, constants.BANKROLL_AMOUNT,
         constants.BANKROLL_AMOUNT, amount_filled, constants.BANKROLL_CURRENCY,
-        constants.BANKROLL_ETH)
-    cursor.execute(update_eth_query)
+        crypto_currency)
+    cursor.execute(update_crypto_query)
 
 
 def write_bankroll_to_influxdb(cursor):
@@ -83,7 +81,7 @@ def write_bankroll_to_influxdb(cursor):
     influxdb_client.write_points(data)
 
 
-def handle_outstanding_orders(cursor):
+def handle_outstanding_orders(cursor, fiat_currency, crypto_currency):
     # Check on previous orders
     fetch_order_query = """select %s from %s""" % (
         constants.PENDING_ORDERS_ORDER_ID, constants.PENDING_ORDERS_TABLE)
@@ -98,9 +96,10 @@ def handle_outstanding_orders(cursor):
 
         order_status = gdax_auth_client.get_order(order_id)
         if (constants.GDAX_MESSAGE in order_status):
-            print("Error: %s", order_status[constants.GDAX_MESSAGE])
+            print("Error: %s" % (order_status[constants.GDAX_MESSAGE]))
         else:
-            write_transaction_to_mysql(cursor, order_status)
+            write_transaction_to_mysql(cursor, order_status, fiat_currency,
+                                       crypto_currency)
 
     # Clear pending orders
     clear_orders_query = """delete from %s""" % (
@@ -117,17 +116,17 @@ def get_balance(currency, cursor):
     return cursor.fetchone()[0]
 
 
-def trade(pred, db):
-    print(pred)
-    cursor = db.cursor()
+def trade(pred, product, cursor):
+    print('Trading with trend prediction of %f for %s at %s' %
+          (pred, product, datetime.now()))
 
-    handle_outstanding_orders(cursor)
+    crypto_currency, fiat_currency = product.split('-')
+    handle_outstanding_orders(cursor, fiat_currency, crypto_currency)
 
+    crypto_bal = get_balance(crypto_currency, cursor)
+    fiat_bal = get_balance(fiat_currency, cursor)
+    ticker_data = gdax_auth_client.get_product_ticker(product_id=product)
     order_id = ''
-
-    usd_bal = get_balance(constants.BANKROLL_USD, cursor)
-    eth_bal = get_balance(constants.BANKROLL_ETH, cursor)
-    ticker_data = gdax_auth_client.get_product_ticker(product_id=CURRENCY)
 
     # Check thresholds and place orders
     if (pred > BUY_CONFIDENCE_THRESHOLD):
@@ -140,17 +139,22 @@ def trade(pred, db):
         order_size = BASE_SIZE * num_units
 
         # Check to see if we have enough money
-        if (usd_bal >= order_size * bid_price):
+        if (fiat_bal >= order_size * bid_price):
             result = gdax_auth_client.buy(
                 price=bid_price,
                 size=order_size,
                 type=constants.ORDER_LIMIT,
                 side=constants.ORDER_BUY,
-                product_id=CURRENCY)
+                product_id=product)
+            print('Place limit buy order at %f for %f unit(s) of %s on %s' %
+                  (bid_price, order_size, crypto_currency, product))
             print(result)
 
             if (constants.GDAX_ID in result):
                 order_id = result[constants.GDAX_ID]
+        else:
+            print('%s balance too low to purchase unit(s) on %s' %
+                  (fiat_currency, product))
 
     elif (pred < SELL_CONFIDENCE_THRESHOLD):
         ask_price = ticker_data[constants.GDAX_ASK]
@@ -162,17 +166,27 @@ def trade(pred, db):
         order_size = BASE_SIZE * num_units
 
         # Check to see if we have enough money
-        if (eth_bal >= order_size):
+        if (crypto_bal >= order_size):
             result = gdax_auth_client.sell(
                 price=ask_price,
                 size=order_size,
                 type=constants.ORDER_LIMIT,
                 side=constants.ORDER_SELL,
-                product_id=CURRENCY)
+                product_id=product)
+            print('Place limit sell order at %f for %f unit(s) of %s on %s' %
+                  (ask_price, order_size, crypto_currency, product))
             print(result)
 
             if (constants.GDAX_ID in result):
                 order_id = result[constants.GDAX_ID]
+        else:
+            print('No units of %s available to sell on %s' % (crypto_currency,
+                                                              product))
+
+    else:
+        print('Predicted trend of %f for %s is below the buy confidence \
+            threshold and above the sell confidence threshold.' % (pred,
+                                                                   product))
 
     # Store new order in pending orders table
     if (order_id):

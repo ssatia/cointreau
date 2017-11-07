@@ -13,7 +13,7 @@ import time
 import trade
 import trainer
 
-PRODUCTS = ['BTC-USD', 'ETH-USD']
+PRODUCTS = ['BTC-USD', 'ETH-USD', 'LTC-USD']
 DATA_GRANULARITY = 60
 HISTORICAL_DATA_BUFFER_SIZE = 10
 SLEEP_TIME = 60

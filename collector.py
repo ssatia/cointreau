@@ -4,7 +4,7 @@ import gdax
 import time
 
 DATA_FOLDER = 'data/'
-PRODUCTS = ['BTC-USD', 'ETH-USD']
+PRODUCTS = ['BTC-USD', 'ETH-USD', 'LTC-USD']
 DATA_GRANULARITY = 60
 
 

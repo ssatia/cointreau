@@ -8,13 +8,13 @@ from pandas import read_csv
 import tensorflow as tf
 
 DATA_FOLDER = 'data/'
-PRODUCTS = ['BTC-USD', 'ETH-USD']
+PRODUCTS = ['BTC-USD', 'ETH-USD', 'LTC-USD']
 INPUT_PLACEHOLDER = 'input'
 OUTPUT_LAYER = 'prediction'
 TRAIN_TEST_SPLIT = 0.9
 INPUT_SIZE = 5 + len(PRODUCTS)
 OUTPUT_SIZE = 1
-LOG_FREQUENCY = 1000
+LOG_FREQUENCY = 100
 
 
 def batchify(data, batch_size):

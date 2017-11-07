@@ -3,33 +3,29 @@ import datetime
 import gdax
 import time
 
-DATA_FILE_PATH = 'data/price_data'
-CURRENCY_ETH = 'ETH-USD'
-CURRENCY_BTC = 'BTC-USD'
+DATA_FOLDER = 'data/'
+PRODUCTS = ['BTC-USD', 'ETH-USD']
 DATA_GRANULARITY = 60
 
 
 def collect_data():
-    data_file_eth = open(DATA_FILE_PATH + '_eth.csv', 'a+')
-    data_file_btc = open(DATA_FILE_PATH + '_btc.csv', 'a+')
+    csv_writers = []
 
-    csv_writer_eth = csv.writer(data_file_eth)
-    csv_writer_btc = csv.writer(data_file_btc)
+    for product in PRODUCTS:
+        data_file = open(DATA_FOLDER + product + '.csv', 'a+')
+        csv_writers.append(csv.writer(data_file))
 
     client = gdax.PublicClient()
 
     start_datetime = datetime.datetime(2017, 1, 1, 0, 0)
     end_datetime = datetime.datetime(2017, 11, 3, 0, 0)
 
-    currencies = [CURRENCY_ETH, CURRENCY_BTC]
-    csv_writers = [csv_writer_eth, csv_writer_btc]
-
     while (start_datetime < end_datetime):
         period_end_datetime = start_datetime + datetime.timedelta(hours=1)
 
-        for (csv_writer_cur, currency) in zip(csv_writers, currencies):
+        for (csv_writer, product) in zip(csv_writers, PRODUCTS):
             prices = client.get_product_historic_rates(
-                currency,
+                product,
                 start_datetime.isoformat(),
                 period_end_datetime.isoformat(), DATA_GRANULARITY)
 
@@ -42,9 +38,9 @@ def collect_data():
                 continue
 
             prices.reverse()
-            csv_writer_cur.writerows(prices)
-            print('Wrote data for timestamp:', start_datetime, 'currency:',
-                  currency)
+            csv_writer.writerows(prices)
+            print('Wrote data for timestamp %s for product %s' %
+                  (start_datetime, product))
 
         start_datetime = period_end_datetime
 

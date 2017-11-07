@@ -5,6 +5,12 @@ import gdax
 from influxdb import InfluxDBClient
 import MySQLdb
 
+BUY_CONFIDENCE_THRESHOLD = 0.02
+SELL_CONFIDENCE_THRESHOLD = -0.01
+BASE_SIZE = 0.01
+LIMIT_ORDER_BID_BUFFER = 0.01
+LIMIT_ORDER_ASK_BUFFER = 0.01
+
 gdax_auth_client = gdax.AuthenticatedClient(api_access_data.GDAX_API_KEY,
                                             api_access_data.GDAX_API_SECRET,
                                             api_access_data.GDAX_PASSPHRASE)
@@ -13,12 +19,6 @@ influxdb_client = InfluxDBClient(
     constants.INFLUXDB_HOST, constants.INFLUXDB_PORT,
     api_access_data.INFLUXDB_USER, api_access_data.INFLUXDB_PASS,
     constants.INFLUXDB_DB_NAME)
-
-BUY_CONFIDENCE_THRESHOLD = 0.02
-SELL_CONFIDENCE_THRESHOLD = -0.01
-BASE_SIZE = 0.01
-LIMIT_ORDER_BID_BUFFER = 0.01
-LIMIT_ORDER_ASK_BUFFER = 0.01
 
 
 def write_transaction_to_mysql(cursor, order, fiat_currency, crypto_currency):

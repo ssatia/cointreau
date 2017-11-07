@@ -7,10 +7,12 @@ import numpy as np
 from pandas import read_csv
 import tensorflow as tf
 
+DATA_FOLDER = 'data/'
+PRODUCTS = ['BTC-USD', 'ETH-USD']
 INPUT_PLACEHOLDER = 'input'
 OUTPUT_LAYER = 'prediction'
 TRAIN_TEST_SPLIT = 0.9
-INPUT_SIZE = 5
+INPUT_SIZE = 5 + len(PRODUCTS)
 OUTPUT_SIZE = 1
 LOG_FREQUENCY = 1000
 
@@ -23,32 +25,47 @@ def batchify(data, batch_size):
     return batch
 
 
-def get_data(input_file, sequence_length, batch_size):
-    data = read_csv(input_file, header=None, usecols=[1, 2, 3, 4, 5]).values
+def get_data(sequence_length, batch_size):
+    train_x = []
+    train_y = []
+    test_x = []
+    test_y = []
 
-    # Make data relative
-    prev = data[0]
-    for i in range(1, len(data)):
-        cur_copy = copy.copy(data[i])
-        data[i] = data[i] / prev
-        prev = cur_copy
-    data = data[1:, :]
+    for (product_idx, product) in enumerate(PRODUCTS):
+        data = read_csv(
+            DATA_FOLDER + product + '.csv',
+            header=None,
+            usecols=[1, 2, 3, 4, 5]).values
 
-    data = np.array(data)
-    x = []
-    y = []
+        # Make data relative
+        prev = data[0]
+        for i in range(1, len(data)):
+            cur_copy = copy.copy(data[i])
+            data[i] = data[i] / prev
+            prev = cur_copy
+        data = data[1:, :]
 
-    for i in range(0, len(data) - sequence_length - 1, sequence_length):
-        x.append(data[i:i + sequence_length, ])
-        y.append([data[i + sequence_length, 3]])
+        data = np.array(data)
+        product_one_hot = [0] * len(PRODUCTS)
+        product_one_hot[product_idx] = 1
+        product_one_hot = [product_one_hot] * len(data)
+        data = np.hstack((product_one_hot, data))
 
-    x, y = np.array(batchify(x, batch_size)), np.array(batchify(y, batch_size))
-    num_train = int(len(x) * TRAIN_TEST_SPLIT)
-    train_x = x[:num_train]
-    train_y = y[:num_train]
-    test_x = x[num_train:]
-    test_y = y[num_train:]
+        x = []
+        y = []
+        for i in range(0, len(data) - sequence_length - 1, sequence_length):
+            x.append(data[i:i + sequence_length, ])
+            y.append([data[i + sequence_length, -2]])
 
+        x, y = np.array(batchify(x, batch_size)), np.array(
+            batchify(y, batch_size))
+        num_train = int(len(x) * TRAIN_TEST_SPLIT)
+        train_x.extend(x[:num_train])
+        train_y.extend(y[:num_train])
+        test_x.extend(x[num_train:])
+        test_y.extend(y[num_train:])
+
+    test_x, test_y = np.array(test_x), np.array(test_y)
     test_x = test_x.reshape(-1, test_x.shape[2], test_x.shape[3])
     test_y = test_y.reshape(-1, test_y.shape[2])
 
@@ -56,8 +73,8 @@ def get_data(input_file, sequence_length, batch_size):
 
 
 def learn(args):
-    train_x, test_x, train_y, test_y = get_data(
-        args.input_file, args.sequence_length, args.batch_size)
+    train_x, test_x, train_y, test_y = get_data(args.sequence_length,
+                                                args.batch_size)
 
     inputs = tf.placeholder(
         tf.float32, (None, args.sequence_length, INPUT_SIZE),
@@ -136,8 +153,6 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description='Train an LSTM model to detect temporal patterns')
 
-    parser.add_argument(
-        '-i', '--input_file', default='data/price_data_eth.csv')
     parser.add_argument(
         '-o',
         '--output_file',

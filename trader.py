@@ -38,10 +38,9 @@ def get_last_x_minute_data(currency, x):
 
     # Detect errors
     if (isinstance(new_data, dict)):
-        print('Error for %s (%s - %s):' %
-              (currency, start_datetime.isoformat(),
-               period_end_datetime.isoformat()))
-        print(prices)
+        print('Error for %s (%s - %s):' % (currency, start_time.isoformat(),
+                                           end_time.isoformat()))
+        print(new_data)
 
         # Try again
         time.sleep(API_BACKOFF_TIME)

@@ -90,11 +90,6 @@ def get_initial_states(sequence_length):
             old_datapoint = new_datapoint
         price_series = price_series[1:, :]
 
-        product_one_hot = [0] * len(PRODUCTS)
-        product_one_hot[product_idx] = 1
-        product_one_hot = [product_one_hot] * len(price_series)
-        price_series = np.hstack((product_one_hot, price_series))
-
         price_series = price_series.reshape(1, price_series.shape[0],
                                             price_series.shape[1])
         states.append(price_series)
@@ -141,6 +136,7 @@ def init(args):
     meta_graph.restore(session, ckpt_file)
     graph = tf.get_default_graph()
     inputs = graph.get_tensor_by_name(trainer.INPUT_PLACEHOLDER + ':0')
+    labels = graph.get_tensor_by_name(trainer.LABEL_PLACEHOLDER + ':0')
     pred = graph.get_tensor_by_name(trainer.OUTPUT_LAYER + ':0')
 
     db = MySQLdb.connect(
@@ -152,8 +148,14 @@ def init(args):
 
     while (True):
         predictions = []
-        for (state, product) in zip(states, PRODUCTS):
-            prediction = session.run([pred], {inputs: state})
+        for (product_idx, (state, product)) in enumerate(
+                zip(states, PRODUCTS)):
+            crypto_labels = np.zeros((1, args.sequence_length))
+            crypto_labels.fill(product_idx)
+            prediction = session.run([pred], {
+                inputs: state,
+                labels: crypto_labels
+            })
             prediction = (np.squeeze(prediction).item() - 1) * 100
             predictions.append((prediction, product))
             print('Product: %s Trend prediction: %f%%' % (product, prediction))
@@ -172,17 +174,17 @@ def init(args):
 
         # Get new data
         for (idx, product) in enumerate(PRODUCTS):
+            # Prevent rate limiting
+            if (idx > 0):
+                time.sleep(1)
+
             new_datapoint = get_last_minute_data(product)
             new_datapoint, last_datapoints[idx] = (
                 new_datapoint / last_datapoints[idx], new_datapoint)
             current_trend = new_datapoint[-2] - 1
-            product_one_hot = [0] * len(PRODUCTS)
-            product_one_hot[idx] = 1
-            new_datapoint_mod = np.hstack((product_one_hot, new_datapoint))
-            new_datapoint_mod = new_datapoint_mod.reshape(
-                1, 1, new_datapoint_mod.shape[0])
+            new_datapoint = new_datapoint.reshape(1, 1, new_datapoint.shape[0])
             states[idx] = np.concatenate(
-                (states[idx][:, 1:, :], new_datapoint_mod), axis=1)
+                (states[idx][:, 1:, :], new_datapoint), axis=1)
             current_trend *= 100
             prediction = list(filter(lambda x: x[1] == product,
                                      predictions))[0][0]

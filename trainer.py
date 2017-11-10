@@ -10,9 +10,10 @@ import tensorflow as tf
 DATA_FOLDER = 'data/'
 PRODUCTS = ['BTC-USD', 'ETH-USD', 'LTC-USD']
 INPUT_PLACEHOLDER = 'input'
+LABEL_PLACEHOLDER = 'label'
 OUTPUT_LAYER = 'prediction'
 TRAIN_TEST_SPLIT = 0.9
-INPUT_SIZE = 5 + len(PRODUCTS)
+INPUT_SIZE = 5
 OUTPUT_SIZE = 1
 LOG_FREQUENCY = 100
 
@@ -44,12 +45,8 @@ def get_data(sequence_length, batch_size):
             data[i] = data[i] / prev
             prev = cur_copy
         data = data[1:, :]
-
-        data = np.array(data)
-        product_one_hot = [0] * len(PRODUCTS)
-        product_one_hot[product_idx] = 1
-        product_one_hot = [product_one_hot] * len(data)
-        data = np.hstack((product_one_hot, data))
+        data = np.hstack((np.ones((len(data), 1)), data))
+        data[:, 0] = product_idx
 
         x = []
         y = []
@@ -80,6 +77,15 @@ def learn(args):
         tf.float32, (None, args.sequence_length, INPUT_SIZE),
         name=INPUT_PLACEHOLDER)
     outputs = tf.placeholder(tf.float32, (None, OUTPUT_SIZE))
+
+    # Embedding for cryptocurency labels
+    crypto_label = tf.placeholder(
+        tf.int32, (None, args.sequence_length), name=LABEL_PLACEHOLDER)
+    embedding_matrix = tf.Variable(
+        tf.random_uniform([len(PRODUCTS), args.embedding_size], -1, 1))
+    crypto_label_embeddings = tf.nn.embedding_lookup(embedding_matrix,
+                                                     crypto_label)
+    inputs_with_embeds = tf.concat([inputs, crypto_label_embeddings], axis=2)
 
     num_hidden_units = args.hidden_units
 
@@ -116,7 +122,8 @@ def learn(args):
         for (counter, (x, y)) in enumerate(zip(train_x, train_y)):
             train_error, _, pred = session.run([error, optimizer, prediction],
                                                {
-                                                   inputs: x,
+                                                   inputs: x[:, :, 1:],
+                                                   crypto_label: x[:, :, 0],
                                                    outputs: y
                                                })
             if (counter % LOG_FREQUENCY == 0):
@@ -132,7 +139,8 @@ def learn(args):
 
     # Testing
     predictions, test_error = session.run([prediction, error], {
-        inputs: test_x,
+        inputs: test_x[:, :, 1:],
+        crypto_label: test_x[:, :, 0],
         outputs: test_y
     })
 
@@ -163,6 +171,7 @@ def parse_args():
     parser.add_argument('-e', '--epochs', type=int, default=1)
     parser.add_argument('-l', '--layers', type=int, default=1)
     parser.add_argument('-d', '--dropout_prob', type=float, default=0.8)
+    parser.add_argument('--embedding_size', type=int, default=4)
     parser.add_argument('--learning_rate', type=float, default=1e-3)
     parser.add_argument('--decay_rate', type=float, default=0.9)
 

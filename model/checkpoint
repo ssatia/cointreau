@@ -1,2 +1,2 @@
-model_checkpoint_path: "uni_lstm_model_n320_l2_b50_e50_lre-3_dr99.ckpt"
-all_model_checkpoint_paths: "uni_lstm_model_n320_l2_b50_e50_lre-3_dr99.ckpt"
+model_checkpoint_path: "uni_lstm_model_n320_l2_b50_e300_lr1e-2_dr99.ckpt"
+all_model_checkpoint_paths: "uni_lstm_model_n320_l2_b50_e300_lr1e-2_dr99.ckpt"

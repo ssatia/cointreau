@@ -31,9 +31,12 @@ INFLUXDB_USER = ''
 INFLUXDB_PASS = ''
 ```
 
-`trader.py` and `trade.py` also use a local MySQL DB and InfluxDB database named 'cointreau' with tables that store performance metrics, bankroll, pending and executed orders.
+`trader.py` and `trade.py` also use a local MySQL DB and InfluxDB database named 'cointreau' with tables that store performance metrics, bankroll, pending and executed orders. These databases and tables can be created automatically using the `db_setup` shell script by running the following command:
+```
+sh db_setup.sh
+```
 
-TODO: Add script to create these databases and tables automatically (assuming MySQL and InfluxDB are already installed locally).
+Note: This script assumes that MySQL and InfluxDB are already installed locally.
 
 
 ## Results

@@ -42,7 +42,7 @@ def get_data(sequence_length, batch_size):
         prev = data[0]
         for i in range(1, len(data)):
             cur_copy = copy.copy(data[i])
-            data[i] = data[i] / prev
+            data[i] = (data[i] / prev) - 1
             prev = cur_copy
         data = data[1:, :]
         data = np.hstack((np.ones((len(data), 1)), data))

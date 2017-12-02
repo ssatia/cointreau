@@ -5,7 +5,7 @@ import time
 
 DATA_FOLDER = 'data/'
 PRODUCTS = ['BTC-USD', 'ETH-USD', 'LTC-USD']
-DATA_GRANULARITY = 60
+DATA_GRANULARITY = 900
 
 
 def collect_data():
@@ -18,21 +18,24 @@ def collect_data():
     client = gdax.PublicClient()
 
     start_datetime = datetime.datetime(2017, 1, 1, 0, 0)
-    end_datetime = datetime.datetime(2017, 11, 3, 0, 0)
+    end_datetime = datetime.datetime(2017, 11, 26, 0, 0)
 
     while (start_datetime < end_datetime):
-        period_end_datetime = start_datetime + datetime.timedelta(hours=1)
+        period_end_datetime = start_datetime + datetime.timedelta(days=1)
 
         for (csv_writer, product) in zip(csv_writers, PRODUCTS):
             prices = client.get_product_historic_rates(
                 product,
                 start_datetime.isoformat(),
                 period_end_datetime.isoformat(), DATA_GRANULARITY)
+        
+            # Prevent rate limiting
+            time.sleep(1)
 
             # Detect errors
             if (isinstance(prices, dict)):
                 print('Error for %s (%s - %s):' %
-                      (currency, start_datetime.isoformat(),
+                      (product, start_datetime.isoformat(),
                        period_end_datetime.isoformat()))
                 print(prices)
                 continue
@@ -43,9 +46,6 @@ def collect_data():
                   (start_datetime, product))
 
         start_datetime = period_end_datetime
-
-        # Prevent rate limiting
-        time.sleep(1)
 
     print('Successfully completed writing historical data')
 

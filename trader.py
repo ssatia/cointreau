@@ -14,9 +14,7 @@ import trade
 import trainer
 
 PRODUCTS = ['BTC-USD', 'ETH-USD', 'LTC-USD']
-DATA_GRANULARITY = 60
-HISTORICAL_DATA_BUFFER_SIZE = 10
-SLEEP_TIME = 60
+SLEEP_TIME = 900
 API_BACKOFF_TIME = 5
 MODEL_DIR = 'model/'
 
@@ -28,13 +26,13 @@ influxdb_client = InfluxDBClient(
     constants.INFLUXDB_DB_NAME)
 
 
-def get_last_x_minute_data(currency, x):
+def get_last_x_minute_data(currency, x, granularity):
     end_time = datetime.now()
-    start_time = end_time - timedelta(minutes=x + HISTORICAL_DATA_BUFFER_SIZE)
+    start_time = end_time - timedelta(minutes=x)
     new_data = gdax_client.get_product_historic_rates(currency,
                                                       start_time.isoformat(),
                                                       end_time.isoformat(),
-                                                      DATA_GRANULARITY)
+                                                      granularity)
 
     # Detect errors
     if (isinstance(new_data, dict)):
@@ -44,7 +42,7 @@ def get_last_x_minute_data(currency, x):
 
         # Try again
         time.sleep(API_BACKOFF_TIME)
-        return get_last_x_minute_data(currency, x)
+        return get_last_x_minute_data(currency, x, granularity)
 
     new_data.reverse()
     new_data = np.array(new_data)[-x:, 1:]
@@ -74,19 +72,19 @@ def merge_candles(candles):
     return merged_candle
 
 
-def get_initial_states(sequence_length):
+def get_initial_states(granularity_mins, sequence_length):
     states = []
     old_datapoints = []
     for (product_idx, product) in enumerate(PRODUCTS):
         print("Collecting context for %s for the last %d mins." %
-              (product, sequence_length))
+              (product, granularity_mins * sequence_length))
 
-        price_series = get_last_x_minute_data(product, sequence_length + 1)
+        price_series = get_last_x_minute_data(product, granularity_mins * sequence_length, granularity_mins * 60)
 
         old_datapoint = price_series[0]
         for i in range(1, sequence_length + 1):
             new_datapoint = copy.copy(price_series[i])
-            price_series[i] /= old_datapoint
+            price_series[i] = (price_series[i] / old_datapoint) - 1
             old_datapoint = new_datapoint
         price_series = price_series[1:, :]
 
@@ -123,7 +121,7 @@ def write_prediction_to_influxdb(predicted_trend, actual_trend, product):
 
 
 def init(args):
-    states, last_datapoints = get_initial_states(args.sequence_length)
+    states, last_datapoints = get_initial_states(args.granularity_mins, args.sequence_length)
 
     # Restore trained model
     session = tf.Session()
@@ -156,7 +154,7 @@ def init(args):
                 inputs: state,
                 labels: crypto_labels
             })
-            prediction = (np.squeeze(prediction).item() - 1) * 100
+            prediction = np.squeeze(prediction).item() * 100
             predictions.append((prediction, product))
             print('Product: %s Trend prediction: %f%%' % (product, prediction))
 
@@ -178,9 +176,9 @@ def init(args):
             if (idx > 0):
                 time.sleep(1)
 
-            new_datapoint = get_last_minute_data(product)
+            new_datapoint = get_last_x_minute_data(product, args.granularity_mins * args.sequence_length, args.granularity_mins * 60)
             new_datapoint, last_datapoints[idx] = (
-                new_datapoint / last_datapoints[idx], new_datapoint)
+                (new_datapoint / last_datapoints[idx]) - 1, new_datapoint)
             current_trend = new_datapoint[-2] - 1
             new_datapoint = new_datapoint.reshape(1, 1, new_datapoint.shape[0])
             states[idx] = np.concatenate(
@@ -197,7 +195,8 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description='Trade using the pre-trained LSTM model')
 
-    parser.add_argument('-s', '--sequence_length', type=int, default=30)
+    parser.add_argument('-s', '--sequence_length', type=int, default=10)
+    parser.add_argument('-g', '--granularity_mins', type=int, default=15)
     parser.add_argument('-m', '--model_file', default='')
     parser.add_argument('-t', '--test', action='store_true', default=False)
 

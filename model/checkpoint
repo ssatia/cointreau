@@ -1,0 +1,2 @@
+model_checkpoint_path: "uni_lstm_model_n40_l2_b20_e10_lre-3_dr99_s10.ckpt"
+all_model_checkpoint_paths: "uni_lstm_model_n40_l2_b20_e10_lre-3_dr99_s10.ckpt"

@@ -28,7 +28,7 @@ def collect_data():
                 product,
                 start_datetime.isoformat(),
                 period_end_datetime.isoformat(), DATA_GRANULARITY)
-        
+
             # Prevent rate limiting
             time.sleep(1)
 

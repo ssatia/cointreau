@@ -14,7 +14,6 @@ import trade
 import trainer
 
 PRODUCTS = ['BTC-USD', 'ETH-USD', 'LTC-USD']
-SLEEP_TIME = 900
 API_BACKOFF_TIME = 5
 MODEL_DIR = 'model/'
 
@@ -26,13 +25,13 @@ influxdb_client = InfluxDBClient(
     constants.INFLUXDB_DB_NAME)
 
 
-def get_last_x_minute_data(currency, x, granularity):
+def get_last_x_interval_data(currency, x, interval_length):
     end_time = datetime.now()
-    start_time = end_time - timedelta(minutes=x)
+    start_time = end_time - timedelta(minutes=x * interval_length)
     new_data = gdax_client.get_product_historic_rates(currency,
                                                       start_time.isoformat(),
                                                       end_time.isoformat(),
-                                                      granularity)
+                                                      interval_length * 60)
 
     # Detect errors
     if (isinstance(new_data, dict)):
@@ -42,7 +41,7 @@ def get_last_x_minute_data(currency, x, granularity):
 
         # Try again
         time.sleep(API_BACKOFF_TIME)
-        return get_last_x_minute_data(currency, x, granularity)
+        return get_last_x_interval_data(currency, x, interval_length)
 
     new_data.reverse()
     new_data = np.array(new_data)[-x:, 1:]
@@ -50,8 +49,8 @@ def get_last_x_minute_data(currency, x, granularity):
     return new_data
 
 
-def get_last_minute_data(currency):
-    new_data = get_last_x_minute_data(currency, 1)
+def get_last_interval_data(currency, interval_length):
+    new_data = get_last_x_interval_data(currency, 1, interval_length)
     new_data = np.squeeze(np.array(merge_candles(new_data)))
 
     return new_data
@@ -72,14 +71,15 @@ def merge_candles(candles):
     return merged_candle
 
 
-def get_initial_states(granularity_mins, sequence_length):
+def get_initial_states(sequence_length, interval_length):
     states = []
     old_datapoints = []
     for (product_idx, product) in enumerate(PRODUCTS):
         print("Collecting context for %s for the last %d mins." %
-              (product, granularity_mins * sequence_length))
+              (product, interval_length * sequence_length))
 
-        price_series = get_last_x_minute_data(product, granularity_mins * sequence_length, granularity_mins * 60)
+        price_series = get_last_x_interval_data(product, sequence_length + 1,
+                                                interval_length)
 
         old_datapoint = price_series[0]
         for i in range(1, sequence_length + 1):
@@ -121,7 +121,8 @@ def write_prediction_to_influxdb(predicted_trend, actual_trend, product):
 
 
 def init(args):
-    states, last_datapoints = get_initial_states(args.granularity_mins, args.sequence_length)
+    states, last_datapoints = get_initial_states(args.sequence_length,
+                                                 args.interval_length)
 
     # Restore trained model
     session = tf.Session()
@@ -168,7 +169,7 @@ def init(args):
                 cursor = db.cursor()
                 trade.trade(prediction, product, cursor)
 
-        time.sleep(SLEEP_TIME)
+        time.sleep(args.interval_length * 60)
 
         # Get new data
         for (idx, product) in enumerate(PRODUCTS):
@@ -176,10 +177,12 @@ def init(args):
             if (idx > 0):
                 time.sleep(1)
 
-            new_datapoint = get_last_x_minute_data(product, args.granularity_mins * args.sequence_length, args.granularity_mins * 60)
+            new_datapoint = get_last_x_interval_data(product, 1,
+                                                     args.interval_length)
+            new_datapoint = np.squeeze(new_datapoint)
             new_datapoint, last_datapoints[idx] = (
                 (new_datapoint / last_datapoints[idx]) - 1, new_datapoint)
-            current_trend = new_datapoint[-2] - 1
+            current_trend = new_datapoint[-2]
             new_datapoint = new_datapoint.reshape(1, 1, new_datapoint.shape[0])
             states[idx] = np.concatenate(
                 (states[idx][:, 1:, :], new_datapoint), axis=1)
@@ -196,7 +199,7 @@ def parse_args():
         description='Trade using the pre-trained LSTM model')
 
     parser.add_argument('-s', '--sequence_length', type=int, default=10)
-    parser.add_argument('-g', '--granularity_mins', type=int, default=15)
+    parser.add_argument('-i', '--interval_length', type=int, default=15)
     parser.add_argument('-m', '--model_file', default='')
     parser.add_argument('-t', '--test', action='store_true', default=False)
 

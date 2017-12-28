@@ -5,6 +5,8 @@ Cointreau is a cryptocurrency trading bot that collects market data, predicts pr
 
 ## Components
 
+![Cointreau Design](/images/cointreau-design.png)
+
 `collector.py`: The collector collects historical market candle data using the GDAX API and stores the collected data in `data/`.
 
 `trainer.py`: Trainer pulls the historical data and trains an LSTM model using a set of configurable parameters. Upon completion of training, the model is stored in `model\` (by default).
